@@ -37,6 +37,7 @@ contract Ticket is Ownable {
     Request[] public requests; //requestsをどこでも使えるように
     address public manager;
     uint public ticketPrice;
+    uint public periodDay;
     //type of key => type of values, public, label the variables
     mapping(address => bool) public approvers;
     uint public approversCount; //how many people has joined in and contributed to this contract
@@ -63,7 +64,7 @@ contract Ticket is Ownable {
         ticketPrice = price;
     }
 
-    function join(string description) public payable {
+    function join(string description, uint _days) public payable {
         //このfunctionでのvalueがミニマム超えていることが条件
         require(msg.value == ticketPrice);
 
@@ -76,8 +77,9 @@ contract Ticket is Ownable {
 
         requests.push(newRequest);
 
-        visitor =msg.sender;
-
+        visitor = msg.sender;
+        requestedTime[visitor] = block.timestamp;
+        periodDay = requestedTime[visitor].add(_days * 1 minutes);
         //label[key]→valueをdefault(=false)からtrueに設定
         approvers[msg.sender] = true;
         approversCount++;
@@ -115,7 +117,7 @@ contract Ticket is Ownable {
     }
 
     function getRefund(uint index) public onlyVisitors() {
-        require(block.timestamp >= requestedTime[msg.sender].add(1 minutes));
+        require(block.timestamp >= periodDay);
         require(!request.approvals[msg.sender]);
         Request storage request = requests[index];
         msg.sender.transfer(requests[0].value);

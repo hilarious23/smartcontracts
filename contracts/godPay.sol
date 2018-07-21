@@ -21,11 +21,11 @@ contract TicketFactory {
 contract Ticket is Ownable {
     using SafeMath for uint256;
     struct Request {
-        string description;
         uint value;
         bool complete;
         mapping(address => bool) approvals;
         address buyer;
+        uint num;
     }
     //These are all variables or pieces of data that are held in out contracts storage
     //storage is available between functions calls (like a computer's hard drive)
@@ -38,8 +38,6 @@ contract Ticket is Ownable {
     mapping(address => bool) public approvers;
     mapping(address => uint) public requestedTime;
     // mapping(Request => address) public ticketToOwner;
-
-    address public visitor;
     modifier restricted() {
         require(msg.sender == manager);
         _;
@@ -53,21 +51,18 @@ contract Ticket is Ownable {
         manager = creater;
         ticketPrice = price;
     }
-    function join(string description, uint _days) public payable {
+    function join(uint _days, uint _num) public payable {
         //このfunctionでのvalueがミニマム超えていることが条件
         require(msg.value == ticketPrice);
 
         Request memory newRequest = Request({
-           description: description,
-           value: ticketPrice,
+           value: ticketPrice * _num,
            complete: false,
-           buyer: msg.sender
+           buyer: msg.sender,
+           num: _num
         });
         requests.push(newRequest);
-
-        visitor = msg.sender;
-        requestedTime[visitor] = block.timestamp;
-        periodDay = requestedTime[visitor].add(_days * 1 minutes);
+        periodDay = requestedTime[msg.sender].add(_days * 1 minutes);
         //label[key]→valueをdefault(=false)からtrueに設定
         approvers[msg.sender] = true;
         approversCount++;
@@ -79,7 +74,7 @@ contract Ticket is Ownable {
         require(request.buyer==msg.sender);
         require(approvers[msg.sender]);
         //voteするのでmsg.senderがvoteしたことに(true)にする
-        request.approvals[msg.sender] = true;
+        request.approvals[request.buyer] = true;
     }
     function withdraw(uint index) public restricted {
         //request[index]というのをたくさん使うのでこのfunction内での変数を設定
@@ -88,7 +83,7 @@ contract Ticket is Ownable {
         Request storage request = requests[index];
 
         //approveされていることを確認
-        require(request.approvals[visitor]);
+        require(request.approvals[request.buyer]);
         //この出金リクエストがcompleteしていないことを確認
         require(!request.complete);
         //defaultはfalse。このfunctionで完了するのでtrueにしておく
@@ -104,7 +99,7 @@ contract Ticket is Ownable {
         require(!request.approvals[msg.sender]);
         Request storage request = requests[index];
         require(request.buyer == msg.sender);
-        msg.sender.transfer(requests[0].value);
+        msg.sender.transfer(request.value);
         request.complete = true;
     }
     //  uintとかはreturnのなかに対応してる

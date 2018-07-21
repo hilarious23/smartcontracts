@@ -114,10 +114,12 @@ contract Ticket is Ownable {
         request.complete = true;
     }
 
-    function getRefund() public onlyVisitors() {
+    function getRefund(uint index) public onlyVisitors() {
         require(block.timestamp >= requestedTime[msg.sender].add(1 minutes));
-
+        require(!request.approvals[msg.sender]);
+        Request storage request = requests[index];
         msg.sender.transfer(requests[0].value);
+        visitors[msg.sender] = false;
     }
 
     //  uintとかはreturnのなかに対応してる

@@ -39,12 +39,18 @@ contract Ticket is Ownable {
     uint public ticketPrice;
     //type of key => type of values, public, label the variables
     mapping(address => bool) public approvers;
-    mapping(address => uint) public joinervalue;
     uint public approversCount; //how many people has joined in and contributed to this contract
     mapping(address => uint) public requestedTime;
+    mapping(address => bool) public visitors;
+    address public visitor;
 
     modifier restricted() {
         require(msg.sender == manager);
+        _;
+    }
+
+    modifier onlyVisitors() {
+        require(visitors[msg.sender] == true);
         _;
     }
 
@@ -54,35 +60,32 @@ contract Ticket is Ownable {
     constructor(uint price, address creater) public {
         //このfunctionを実行させた（つまりコントラクト作成者）人をmanagerに設定
         manager = creater;
-        //minimumとして入力したものをminimumContributionに設定
         ticketPrice = price;
-        requestedTime[manager] = block.timestamp;
     }
 
-    function createRequest(string description, uint value) public restricted {
+    function join(string description) public payable {
+        //このfunctionでのvalueがミニマム超えていることが条件
+        require(msg.value == ticketPrice);
 
         Request memory newRequest = Request({
            description: description,
-           value: value,
+           value: ticketPrice,
            complete: false
            //only have to initialize value type. no need to reference type. mapping is reference type
         });
 
         requests.push(newRequest);
-    }
 
-    function join() public payable {
-        //このfunctionでのvalueがミニマム超えていることが条件
-        require(msg.value == ticketPrice);
-        //Joinは1回のみ。2回目やるとエラーでるので表示する
-        require(!approvers[msg.sender]);
+        visitor =msg.sender;
+
         //label[key]→valueをdefault(=false)からtrueに設定
         approvers[msg.sender] = true;
-        joinervalue[msg.sender] = msg.value;
         approversCount++;
+        visitors[msg.sender] = true;
+        requestedTime[msg.sender] = block.timestamp;
     }
 
-    function approveRequest(uint index) public {
+    function approveRequest(uint index) public onlyVisitors() {
         Request storage request = requests[index];
 
         //check if msg.sender has already donated this contract
@@ -100,7 +103,7 @@ contract Ticket is Ownable {
         Request storage request = requests[index];
 
         //approveされていることを確認
-        require(request.approvals[msg.sender]);
+        require(request.approvals[visitor]);
 
         //この出金リクエストがcompleteしていないことを確認
         require(!request.complete);
@@ -111,13 +114,19 @@ contract Ticket is Ownable {
         request.complete = true;
     }
 
+    function getRefund() public onlyVisitors() {
+        require(block.timestamp >= requestedTime[msg.sender].add(1 minutes));
+
+        msg.sender.transfer(requests[0].value);
+    }
+
     //  uintとかはreturnのなかに対応してる
     function getSummary() public view returns (
       uint, uint, uint, uint, address
       ) {
         return (
           ticketPrice,
-          this.balance,
+          address(this).balance,
           requests.length,
           approversCount,
           manager

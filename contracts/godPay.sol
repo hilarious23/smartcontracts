@@ -1,12 +1,9 @@
-pragma solidity ^ 0.4.17;
-
+pragma solidity ^ 0.4.24;
 import "github.com/OpenZeppelin/openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "github.com/OpenZeppelin/openzeppelin-solidity/contracts/ownership/Ownable.sol";
-
 contract TicketFactory {
     //Ticket一覧を作成
     address[] public deployedTickets;
-
     //constructor() ? priceをTicketにわたす
     function createTicket(uint price) public {
         //create new contract that get deployed to blockchain
@@ -15,14 +12,12 @@ contract TicketFactory {
         address newTicket = new Ticket(price, msg.sender);
         deployedTickets.push(newTicket);
     }
-
     //make sure we add a function that returns the entire array of deployedProjects
         //view means no date inside the contract is modified by this function
     function getDeployedTickets() public view returns(address[]) {
         return deployedTickets;
     }
 }
-
 contract Ticket is Ownable {
     using SafeMath for uint256;
     struct Request {
@@ -30,28 +25,23 @@ contract Ticket is Ownable {
         uint value;
         bool complete;
         mapping(address => bool) approvals;
+        address buyer;
     }
-
     //These are all variables or pieces of data that are held in out contracts storage
     //storage is available between functions calls (like a computer's hard drive)
     Request[] public requests; //requestsをどこでも使えるように
     address public manager;
     uint public ticketPrice;
     uint public periodDay;
+    uint public approversCount; //how many people has joined in and contributed to this contract
     //type of key => type of values, public, label the variables
     mapping(address => bool) public approvers;
-    uint public approversCount; //how many people has joined in and contributed to this contract
     mapping(address => uint) public requestedTime;
-    mapping(address => bool) public visitors;
-    address public visitor;
+    // mapping(Request => address) public ticketToOwner;
 
+    address public visitor;
     modifier restricted() {
         require(msg.sender == manager);
-        _;
-    }
-
-    modifier onlyVisitors() {
-        require(visitors[msg.sender] == true);
         _;
     }
 
@@ -63,7 +53,6 @@ contract Ticket is Ownable {
         manager = creater;
         ticketPrice = price;
     }
-
     function join(string description, uint _days) public payable {
         //このfunctionでのvalueがミニマム超えていることが条件
         require(msg.value == ticketPrice);
@@ -71,10 +60,9 @@ contract Ticket is Ownable {
         Request memory newRequest = Request({
            description: description,
            value: ticketPrice,
-           complete: false
-           //only have to initialize value type. no need to reference type. mapping is reference type
+           complete: false,
+           buyer: msg.sender
         });
-
         requests.push(newRequest);
 
         visitor = msg.sender;
@@ -83,21 +71,16 @@ contract Ticket is Ownable {
         //label[key]→valueをdefault(=false)からtrueに設定
         approvers[msg.sender] = true;
         approversCount++;
-        visitors[msg.sender] = true;
-        requestedTime[msg.sender] = block.timestamp;
     }
-
-    function approveRequest(uint index) public onlyVisitors() {
+    function approveRequest(uint index) public {
         Request storage request = requests[index];
-
         //check if msg.sender has already donated this contract
         //falseならここでfunction exit
+        require(request.buyer==msg.sender);
         require(approvers[msg.sender]);
-
         //voteするのでmsg.senderがvoteしたことに(true)にする
         request.approvals[msg.sender] = true;
     }
-
     function withdraw(uint index) public restricted {
         //request[index]というのをたくさん使うのでこのfunction内での変数を設定
         //Requestを使うこと使うことでspecify we are about to create a variable
@@ -106,24 +89,24 @@ contract Ticket is Ownable {
 
         //approveされていることを確認
         require(request.approvals[visitor]);
-
         //この出金リクエストがcompleteしていないことを確認
         require(!request.complete);
+        //defaultはfalse。このfunctionで完了するのでtrueにしておく
+        request.complete = true;
 
         //request(=request[index])のvalue(金額)をmanagerに送金
         manager.transfer(request.value);
-        //defaultはfalse。このfunctionで完了するのでtrueにしておく
-        request.complete = true;
     }
 
-    function getRefund(uint index) public onlyVisitors() {
+    function getRefund(uint index) public {
+        require(request.buyer==msg.sender);
         require(block.timestamp >= periodDay);
         require(!request.approvals[msg.sender]);
         Request storage request = requests[index];
+        require(request.buyer == msg.sender);
         msg.sender.transfer(requests[0].value);
-        visitors[msg.sender] = false;
+        request.complete = true;
     }
-
     //  uintとかはreturnのなかに対応してる
     function getSummary() public view returns (
       uint, uint, uint, uint, address
